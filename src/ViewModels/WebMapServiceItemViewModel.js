@@ -324,13 +324,13 @@ WebMapServiceItemViewModel.prototype._enableInLeaflet = function() {
             var params = uri.search(true);
             var newParams = that._imageryLayer.cesiumParams;
             for (var p in params) {
-                if (params.hasOwnProperty p) {
+                if (params.hasOwnProperty(p)) {
                     newParams[p.toLowerCase()] = params[p];
                 }
             }
             uri.query(URI.buildQuery(newParams, true));
             return uri.toString();
-        }
+        };
     }
 };
 
