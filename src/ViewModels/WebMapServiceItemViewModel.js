@@ -15,6 +15,9 @@ var loadXML = require('../../third_party/cesium/Source/Core/loadXML');
 var WebMapServiceImageryProvider = require('../../third_party/cesium/Source/Scene/WebMapServiceImageryProvider');
 var WebMercatorTilingScheme = require('../../third_party/cesium/Source/Core/WebMercatorTilingScheme');
 
+
+var ImageryProvider = require('../../third_party/cesium/Source/Scene/ImageryProvider');
+
 var MetadataViewModel = require('./MetadataViewModel');
 var MetadataItemViewModel = require('./MetadataItemViewModel');
 var ImageryLayerItemViewModel = require('./ImageryLayerItemViewModel');
@@ -311,27 +314,24 @@ WebMapServiceItemViewModel.prototype._enableInLeaflet = function() {
 
     this._imageryLayer = new L.tileLayer.wms(cleanAndProxyUrl(this.application, this.url), options);
 
-    //modify the leaflet url so that it is exactly the same as the cesium version for better caching
-    if (true) {
-        this._imageryLayer.getTileUrlOrig = this._imageryLayer.getTileUrl;
-        var cesiumUrl = 'https://programs.communications.gov.au/geoserver/ows?tiled=true&transparent=true&format=image%2Fpng&exceptions=application%2Fvnd.ogc.se_xml&styles=&service=WMS&version=1.1.1&request=GetMap&layers=MyBroadband_ADSL_Quality_no_outline&srs=EPSG%3A4326&bbox=-90%2C0%2C0%2C90&width=256&height=256';
-        var cesiumUri = new URI(cesiumUrl);
-        this._imageryLayer.cesiumParams = cesiumUri.search(true);
-        var that = this;
-        this._imageryLayer.getTileUrl = function(coords) {
-            var url = that._imageryLayer.getTileUrlOrig(coords);
-            var uri = new URI(url);
-            var params = uri.search(true);
-            var newParams = that._imageryLayer.cesiumParams;
-            for (var p in params) {
-                if (params.hasOwnProperty(p)) {
-                    newParams[p.toLowerCase()] = params[p];
-                }
-            }
-            uri.query(URI.buildQuery(newParams, true));
-            return uri.toString();
-        };
-    }
+    this._CesiumImageryProvider = new WebMapServiceImageryProvider({
+        url : cleanAndProxyUrl(this.application, this.url),
+        layers : this.layers,
+        getFeatureInfoAsGeoJson : this.getFeatureInfoAsGeoJson,
+        getFeatureInfoAsXml : this.getFeatureInfoAsXml,
+        parameters : combine(this.parameters, WebMapServiceItemViewModel.defaultParameters),
+        tilingScheme : this.tilingScheme === undefined ? new WebMercatorTilingScheme() : this.tilingScheme
+    });
+
+    ImageryProvider.oldLoadImage = ImageryProvider.loadImage;
+    ImageryProvider.loadImage = function (param1, url) {
+        return url;
+    };
+
+    var that = this;
+    this._imageryLayer.getTileUrl = function(coords) {
+        return that._CesiumImageryProvider.requestImage(coords.x, coords.y, coords.z);
+    };
 };
 
 WebMapServiceItemViewModel.prototype._disableInLeaflet = function() {
@@ -339,6 +339,8 @@ WebMapServiceItemViewModel.prototype._disableInLeaflet = function() {
         throw new DeveloperError('This data source is not enabled.');
     }
 
+    ImageryProvider.loadImage = ImageryProvider.oldLoadImage;
+    this._CesiumImageryProvider = undefined;
     this._imageryLayer = undefined;
 };
 
